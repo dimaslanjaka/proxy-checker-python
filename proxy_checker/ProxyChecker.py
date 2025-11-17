@@ -4,6 +4,7 @@ from typing import Optional, Union, Literal
 from .FileCache import FileCache
 from .ProxyChekerResult import ProxyChekerResult
 from .utils.curl import send_query
+from .utils.get_device_ip import get_device_ip
 
 
 # Precompile regexes once
@@ -39,7 +40,7 @@ class ProxyChecker:
             "http://sh.webmanajemen.com/data/azenv.php",
         ]
 
-        self.ip = self.get_device_ip()
+        self.ip = get_device_ip(timeout=self.timeout, verbose=self.verbose)
         if not self.ip:
             print("ERROR: cannot get device ip")
 
@@ -68,46 +69,6 @@ class ProxyChecker:
             exit()
         if count == 1:
             print("WARNING! THERE'S ONLY 1 JUDGE!")
-
-    def get_device_ip(self, cache_timeout: Optional[int] = 3600) -> str:
-        cache = FileCache("tmp/device-ip.json")
-
-        cached = cache.read_cache()
-        if cached:
-            return cached
-
-        ip_services = [
-            "https://api64.ipify.org",
-            "https://ipinfo.io/ip",
-            "https://api.myip.com",
-            "https://ip.42.pl/raw",
-            "https://ifconfig.me/ip",
-            "https://cloudflare.com/cdn-cgi/trace",
-            "https://httpbin.org/ip",
-            "https://api.ipify.org",
-        ]
-
-        resp = None
-        for url in ip_services:
-            resp = send_query(
-                url=url,
-                timeout=self.timeout,
-                verbose=self.verbose,
-            )
-            if resp and not getattr(resp, "error", False):
-                break
-        if not resp or getattr(resp, "error", False):
-            return ""
-
-        match = REGEX_IP.search(resp.response or "")
-        if match:
-            ip = match.group(0)
-            cache.write_cache(ip, cache_timeout or 3600)
-            return ip
-
-        return resp.response or ""
-
-    # `send_query` moved to `proxy_checker.utils.curl.send_query`
 
     def parse_anonymity(
         self, response: str
