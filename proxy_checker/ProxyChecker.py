@@ -16,8 +16,6 @@ REGEX_IP = re.compile(
 )
 REMOTE_ADDR_REGEX = re.compile(r"REMOTE_ADDR = (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 
-PROBE_URL = "https://www.google.com"
-
 
 class ProxyChecker:
     def __init__(self, timeout: int = 30000, verbose: bool = False):
@@ -56,54 +54,55 @@ class ProxyChecker:
         check_all_protocols: bool = False,
         protocol: Optional[Union[str, list]] = None,
         retries: int = 1,
-        tls: Literal["1.3", "1.2", "1.1", "1.0"] = "1.3",
+        tls: Union[Literal["1.3", "1.2", "1.1", "1.0"], str] = "1.3",
         user: Optional[str] = None,
         password: Optional[str] = None,
         timeout: Optional[int] = None,
+        test_url: Optional[str] = None,
     ) -> ProxyChekerResult:
         """Check a proxy for working protocols, anonymity, latency and country.
 
-        Parameters
-        ----------
-        proxy : str
-            Proxy address in the form 'host:port'. For protocol testing the method
-            will prefix this value with protocol scheme (e.g. 'http://host:port').
-        check_country : bool, default=True
-            If True, query the IP geolocation service to get country and country code.
-        check_address : bool, default=False
-            If True, attempt to parse REMOTE_ADDR from the judge response.
-        check_all_protocols : bool, default=False
-            If True, test all protocols listed; otherwise stop after the first success.
-        protocol : Optional[Union[str, list]], default=None
-            A single protocol name (e.g. 'http') or a list of protocols to test.
-            When None all supported protocols ('http','https','socks4','socks5') are used.
-        retries : int, default=1
-            How many times to retry protocol checks.
-        tls : float, default=1.3
-            Maximum TLS version to allow when using an HTTPS proxy (1.3,1.2,1.1,1.0).
-        user, password : Optional[str]
-            Optional proxy authentication credentials.
-        timeout : Optional[int], default=None
-            Per-request timeout in milliseconds (ms). If None the instance
-            default `self.timeout` is used.
+            Parameters
+            ----------
+            proxy : str
+                Proxy address in the form 'host:port'. For protocol testing the method
+                will prefix this value with protocol scheme (e.g. 'http://host:port').
+            check_country : bool, default=True
+                If True, query the IP geolocation service to get country and country code.
+            check_address : bool, default=False
+                If True, attempt to parse REMOTE_ADDR from the judge response.
+            check_all_protocols : bool, default=False
+                If True, test all protocols listed; otherwise stop after the first success.
+            protocol : Optional[Union[str, list]], default=None
+                A single protocol name (e.g. 'http') or a list of protocols to test.
+                When None all supported protocols ('http','https','socks4','socks5') are used.
+            retries : int, default=1
+                How many times to retry protocol checks.
+            tls : float, default=1.3
+                Maximum TLS version to allow when using an HTTPS proxy (1.3,1.2,1.1,1.0).
+            user, password : Optional[str]
+                Optional proxy authentication credentials.
+            timeout : Optional[int], default=None
+                Per-request timeout in milliseconds (ms). If None the instance
+                default `self.timeout` is used.
 
-        Returns
-        -------
-        ProxyChekerResult
-            Dataclass with fields: protocols (List[str]), anonymity (Literal), latency (ms int),
-            country, country_code, proxy (remote address when check_address=True), and error flag.
+            Returns
+            -------
+            ProxyChekerResult
+                Dataclass with fields: protocols (List[str]), anonymity (Literal), latency (ms int),
+                country, country_code, proxy (remote address when check_address=True), and error flag.
 
-        Notes
-        -----
-        - The timeout parameter is in milliseconds to match the underlying pycurl usage.
-        - The method will return a `ProxyChekerResult` with `error=True` when no protocol
-          succeeds.
+            Notes
+            -----
+            - The timeout parameter is in milliseconds to match the underlying pycurl usage.
+            - The method will return a `ProxyChekerResult` with `error=True` when no protocol
+              succeeds.
 
         Example
-        -------
-        >>> checker = ProxyChecker()
-        >>> result = checker.check_proxy('1.2.3.4:8080', timeout=10000)
-        >>> print(result.to_json())
+            -------
+            >>> checker = ProxyChecker()
+            >>> result = checker.check_proxy('1.2.3.4:8080', timeout=10000)
+            >>> print(result.to_json())
         """
         all_protocols = ["http", "https", "socks4", "socks5"]
 
@@ -124,7 +123,7 @@ class ProxyChecker:
                 # Query a fixed probe URL using the protocol-prefixed proxy URL
                 proxy_url = f"{proto}://{proxy}"
                 result = send_query(
-                    url=PROBE_URL,
+                    url=test_url or "https://www.google.com",
                     proxy=proxy_url,
                     user=user,
                     password=password,
