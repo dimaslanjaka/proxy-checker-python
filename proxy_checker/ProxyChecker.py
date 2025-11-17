@@ -9,6 +9,26 @@ from typing import Any, Optional, Union
 import certifi
 import pycurl
 from .FileCache import FileCache
+from .ProxyChekerResult import ProxyChekerResult
+
+
+# Precompile regexes once
+REGEX_IP = re.compile(
+    r"(?!0)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
+    r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+)
+REMOTE_ADDR_REGEX = re.compile(r"REMOTE_ADDR = (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
+
+PRIVACY_HEADERS = {
+    "VIA",
+    "X-FORWARDED-FOR",
+    "X-FORWARDED",
+    "FORWARDED-FOR",
+    "FORWARDED-FOR-IP",
+    "FORWARDED",
+    "CLIENT-IP",
+    "PROXY-CONNECTION",
+}
 
 
 class ProxyChecker:
@@ -26,67 +46,36 @@ class ProxyChecker:
         ]
 
         self.ip = self.get_device_ip()
-
-        # Checks
-        if self.ip == "":
+        if not self.ip:
             print("ERROR: cannot get device ip")
 
         self.check_proxy_judges()
 
     def change_timeout(self, timeout: int) -> None:
-        """
-        Sets timeout for requests
-        Args:
-            :param timeout, int. Timeout in ms
-        """
         self.timeout = timeout
 
     def change_verbose(self, value: bool) -> None:
-        """
-        Sets verbose for curl
-        """
         self.verbose = value
 
     def check_proxy_judges(self) -> None:
-        """
-        This proxy checks several urls to get the proxy availability. These are the judges.
-        There are several in this module. However, they can be nonoperational. This function
-        removes the one not operative.
-        """
-        checked_judges = []
+        checked = [j for j in self.proxy_judges if self.send_query(url=j)]
+        self.proxy_judges = checked
 
-        for judge in self.proxy_judges:
-            if self.send_query(url=judge):
-                checked_judges.append(judge)
-
-        # push working proxy judges url for `check_proxy`
-        self.proxy_judges = checked_judges
-
-        if len(checked_judges) == 0:
+        count = len(checked)
+        if count == 0:
             print(
                 "ERROR: JUDGES ARE OUTDATED. CREATE A GIT BRANCH AND UPDATE SELF.PROXY_JUDGES"
             )
             exit()
-        elif len(checked_judges) == 1:
+        if count == 1:
             print("WARNING! THERE'S ONLY 1 JUDGE!")
 
     def get_device_ip(self, cache_timeout: Optional[int] = 3600) -> str:
-        """
-        Gets the IP address by checking it via various services.
-
-        Parameters:
-        cache_timeout (Optional[int]): Cache timeout in seconds. Default is 3600 seconds (1 hour).
-
-        Returns:
-        str: IP address or an empty string if it couldn't find anything.
-        """
         cache = FileCache("tmp/device-ip.json")
-        # Read cache and check for expiration
-        cached_value = cache.read_cache()
-        if cached_value is not None:
-            return cached_value
-        if not cache_timeout:
-            cache_timeout = 3600
+
+        cached = cache.read_cache()
+        if cached:
+            return cached
 
         ip_services = [
             "https://api64.ipify.org",
@@ -98,28 +87,22 @@ class ProxyChecker:
             "https://httpbin.org/ip",
             "https://api.ipify.org",
         ]
-        r = None
-        for url in ip_services:
-            r = self.send_query(url=url)
-            if r:
-                break
 
-        if not r:
+        resp = None
+        for url in ip_services:
+            resp = self.send_query(url=url)
+            if resp:
+                break
+        if not resp:
             return ""
 
-        # parse IP using regex
-        ip_address_match = re.search(
-            r"(?!0)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)",
-            r["response"],
-        )
-        if ip_address_match:
-            result = ip_address_match.group(0)
-            if result:
-                # Write cache with a value and expiration time in seconds
-                cache.write_cache(result, cache_timeout)
-            return result
+        match = REGEX_IP.search(resp["response"])
+        if match:
+            ip = match.group(0)
+            cache.write_cache(ip, cache_timeout or 3600)
+            return ip
 
-        return r["response"]
+        return resp["response"]
 
     def send_query(
         self,
@@ -129,112 +112,66 @@ class ProxyChecker:
         user: Optional[str] = None,
         password: Optional[str] = None,
     ) -> Union[None, dict]:
-        """
-        Sends a query to a judge to get info from judge.
-        Args:
-            :param proxy: "IP:Port". Proxy to use in the connection
-            :param url: Url judge to use
-            :param tls
-            :param user: Username for proxy
-            :param password: Password for proxy
-        Returns:
-            False if response is not 200. Otherwise: 'timeout': timeout,'response': response}
-        """
         response = BytesIO()
         c = pycurl.Curl()
+
         if self.verbose:
             c.setopt(pycurl.VERBOSE, True)
 
         c.setopt(pycurl.URL, url or random.choice(self.proxy_judges))
         c.setopt(pycurl.WRITEDATA, response)
         c.setopt(pycurl.TIMEOUT_MS, self.timeout)
-
-        if user is not None and password is not None:
-            c.setopt(pycurl.PROXYUSERPWD, f"{user}:{password}")
-
         c.setopt(pycurl.SSL_VERIFYHOST, 0)
         c.setopt(pycurl.SSL_VERIFYPEER, 0)
 
+        if user and password:
+            c.setopt(pycurl.PROXYUSERPWD, f"{user}:{password}")
+
         if proxy:
             c.setopt(pycurl.PROXY, proxy)
-            if proxy.startswith("https"):
-                # c.setopt(pycurl.SSL_VERIFYHOST, 1)
-                # c.setopt(pycurl.SSL_VERIFYHOST, 2)
-                # c.setopt(pycurl.SSL_VERIFYPEER, 1)
-                c.setopt(pycurl.CAINFO, certifi.where())
-                if tls == 1.3:
-                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_3)
-                elif tls == 1.2:
-                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_2)
-                elif tls == 1.1:
-                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_1)
-                elif tls == 1.0:
-                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_0)
 
-        # Perform request
+            if proxy.startswith("https"):
+                c.setopt(pycurl.CAINFO, certifi.where())
+                versions = {
+                    1.3: pycurl.SSLVERSION_MAX_TLSv1_3,
+                    1.2: pycurl.SSLVERSION_MAX_TLSv1_2,
+                    1.1: pycurl.SSLVERSION_MAX_TLSv1_1,
+                    1.0: pycurl.SSLVERSION_MAX_TLSv1_0,
+                }
+                c.setopt(
+                    pycurl.SSLVERSION, versions.get(tls, pycurl.SSLVERSION_MAX_TLSv1_3)
+                )
+
         try:
             c.perform()
-        except Exception as e:
-            # print(e)
+        except Exception:
             return None
 
-        # Return None if the status is not 200
         if c.getinfo(pycurl.HTTP_CODE) != 200:
             return None
 
-        # Calculate the request timeout in milliseconds
         timeout = round(c.getinfo(pycurl.CONNECT_TIME) * 1000)
+        resp_text = response.getvalue().decode("iso-8859-1")
 
-        # Decode the response content
-        response = response.getvalue().decode("iso-8859-1")
+        return {"timeout": timeout, "response": resp_text}
 
-        return {"timeout": timeout, "response": response}
-
-    def parse_anonymity(self, r: str) -> str:
-        """
-        Obtain the anonymity of the proxy
-        Args:
-            :param, str. IP
-        Return: Transparent, Anonymous, Elite. Empty for failed get anonymity
-        """
-        if self.ip == "":
+    def parse_anonymity(self, response: str) -> str:
+        if not self.ip:
             return ""
 
-        if self.ip in r:
-            # device ip is found in proxy judges response headers
+        if self.ip in response:
             return "Transparent"
 
-        privacy_headers = [
-            "VIA",
-            "X-FORWARDED-FOR",
-            "X-FORWARDED",
-            "FORWARDED-FOR",
-            "FORWARDED-FOR-IP",
-            "FORWARDED",
-            "CLIENT-IP",
-            "PROXY-CONNECTION",
-        ]
-
-        if any([header in r for header in privacy_headers]):
-            # contains spesific headers
+        if any(header in response for header in PRIVACY_HEADERS):
             return "Anonymous"
 
-        # perfect
         return "Elite"
 
     def get_country(self, ip: str) -> list:
-        """
-        Checks in https://ip2c.org the country from a given IP
-        Args:
-            :param ip, str. Including dots, but not port
-        Return: [country, country shortname Alpha-2 code]
-        """
         r = self.send_query(url="https://ip2c.org/" + ip)
-
-        if r and r["response"][0] == "1":
-            r = r["response"].split(";")
-            return [r[3], r[1]]
-
+        if r and r["response"].startswith("1"):
+            fields = r["response"].split(";")
+            return [fields[3], fields[1]]
         return ["-", "-"]
 
     def check_proxy(
@@ -248,105 +185,75 @@ class ProxyChecker:
         tls: float = 1.3,
         user: Optional[str] = None,
         password: Optional[str] = None,
-    ) -> Union[None, dict]:
-        """
-        Checks if the proxy is working.
-        Args:
-            :param proxy: str "IP:Port", Ip including the dots.
-            :param check_country: bool. Get country and country_code from https://ip2c.org/
-            :param check_address: bool. Take remote adress from judge url
-            :param check_all_protocols: bool. If True, after we found the proxy is of a specific \
-                                        protocol, we continue looking for its validity for others. Protocols are: http, https, socks4, socks5
-            :param protocol: str. 'http', 'https', 'socks4', 'socks5', or a list containing some of these. Check only these protocols
-            :param retries: int. Number of times to retry the checking in case of proxy failure
-            :param tls: float. 1.3, 1.2, 1.1, 1.0. If using https, this will be the maximum TLS tried in the connection. Notice that the TLS version
-                    to be used will be random, but as maximum this parameter
-            :param user: str. User to use for proxy connection
-            :param password: str. Password to use for proxy connection
-        Return:
-            False if not working. Otherwise:
-            {'protocols': list of protocols available, 'anonymity': 'Anonymous' or 'Transparent' or 'Elite','timeout': timeout\
-             'country': 'country', 'country_code': 'country_code', 'remote_address':'remote_address'}
-        """
+    ) -> ProxyChekerResult:
 
-        protocols = {}
-        timeout = 0
-
-        # Select protocols to check
-        protocols_to_test = ["http", "https", "socks4", "socks5"]
+        all_protocols = ["http", "https", "socks4", "socks5"]
 
         if isinstance(protocol, list):
-            temp = []
-            for p in protocol:
-                if p in protocols_to_test:
-                    temp.append(p)
-
-            if len(temp) != 0:
-                protocols_to_test = temp
-
-        elif protocol in protocols_to_test:
+            protocols_to_test = [
+                p for p in protocol if p in all_protocols
+            ] or all_protocols
+        elif protocol in all_protocols:
             protocols_to_test = [protocol]
+        else:
+            protocols_to_test = all_protocols
 
-        # Test the proxy for each protocol
-        for retry in range(retries):
-            for protocol in protocols_to_test:
+        protocols = {}
+        total_timeout = 0
+
+        for _ in range(retries):
+            for proto in protocols_to_test:
                 r = self.send_query(
-                    proxy=protocol + "://" + proxy,
+                    proxy=f"{proto}://{proxy}",
                     user=user,
                     password=password,
                     tls=tls,
                 )
-
-                # Check if the request failed
                 if not r:
                     continue
 
-                protocols[protocol] = r
-                timeout += r["timeout"]
+                protocols[proto] = r
+                total_timeout += r["timeout"]
 
                 if not check_all_protocols:
                     break
 
-            # Do not retry if any connection was successful
-            if timeout != 0:
+            if total_timeout:
                 break
 
-        # Check if the proxy failed all tests
-        if len(protocols) == 0:
-            return None
+        if not protocols:
+            return ProxyChekerResult(
+                protocols=[],
+                anonymity="",
+                timeout=0,
+                country=None,
+                country_code=None,
+                proxy=None,
+                error=True,
+            )
 
-        r = protocols[random.choice(list(protocols.keys()))]["response"]
+        sample_response = random.choice(list(protocols.values()))["response"]
 
-        # Get country
-        country = []
-        if check_country:
-            country = self.get_country(proxy.split(":")[0])
+        country = (
+            self.get_country(proxy.split(":")[0]) if check_country else [None, None]
+        )
 
-        # Check anonymity
-        anonymity = self.parse_anonymity(r)
+        anonymity = self.parse_anonymity(sample_response)
 
-        # Check timeout
-        timeout = timeout // len(protocols)
+        avg_timeout = total_timeout // len(protocols)
 
-        # Check remote address
-        remote_addr = "0.0.0.0"
+        remote_addr = None
         if check_address:
-            remote_regex = r"REMOTE_ADDR = (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
-            remote_addr = re.search(remote_regex, r)
-            if remote_addr:
-                remote_addr = remote_addr.group(1)
+            match = REMOTE_ADDR_REGEX.search(sample_response)
+            if match:
+                remote_addr = match.group(1)
 
-        results = {
-            "protocols": list(protocols.keys()),
-            "anonymity": anonymity,
-            "timeout": timeout,
-        }
-
-        if check_country:
-            results["country"] = country[0]
-            results["country_code"] = country[1]
-
-        if check_address:
-            results["remote_address"] = remote_addr
-
-        return results
+        return ProxyChekerResult(
+            protocols=list(protocols.keys()),
+            anonymity=anonymity,
+            timeout=avg_timeout,
+            country=country[0],
+            country_code=country[1],
+            proxy=remote_addr,
+            error=False,
+        )
