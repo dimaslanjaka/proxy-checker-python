@@ -1,12 +1,9 @@
 import random
 import re
-from io import BytesIO
 from typing import Optional, Union, Literal
-
-import certifi
-import pycurl
 from .FileCache import FileCache
 from .ProxyChekerResult import ProxyChekerResult
+from .utils.curl import send_query
 
 
 # Precompile regexes once
@@ -29,7 +26,7 @@ PRIVACY_HEADERS = {
 
 
 class ProxyChecker:
-    def __init__(self, timeout: int = 5000, verbose: bool = False):
+    def __init__(self, timeout: int = 30000, verbose: bool = False):
         self.timeout = timeout
         self.verbose = verbose
         self.proxy_judges = [
@@ -55,7 +52,12 @@ class ProxyChecker:
         self.verbose = value
 
     def check_proxy_judges(self) -> None:
-        checked = [j for j in self.proxy_judges if self.send_query(url=j)]
+        checked = []
+        for url in self.proxy_judges:
+            res = send_query(url=url, timeout=self.timeout, verbose=self.verbose)
+            if res and not getattr(res, "error", False):
+                checked.append(url)
+
         self.proxy_judges = checked
 
         count = len(checked)
@@ -87,72 +89,25 @@ class ProxyChecker:
 
         resp = None
         for url in ip_services:
-            resp = self.send_query(url=url)
-            if resp:
+            resp = send_query(
+                url=url,
+                timeout=self.timeout,
+                verbose=self.verbose,
+            )
+            if resp and not getattr(resp, "error", False):
                 break
-        if not resp:
+        if not resp or getattr(resp, "error", False):
             return ""
 
-        match = REGEX_IP.search(resp["response"])
+        match = REGEX_IP.search(resp.response or "")
         if match:
             ip = match.group(0)
             cache.write_cache(ip, cache_timeout or 3600)
             return ip
 
-        return resp["response"]
+        return resp.response or ""
 
-    def send_query(
-        self,
-        proxy: Optional[str] = None,
-        url: Optional[str] = None,
-        tls=1.3,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-    ) -> Union[None, dict]:
-        response = BytesIO()
-        c = pycurl.Curl()
-
-        if self.verbose:
-            c.setopt(pycurl.VERBOSE, True)
-
-        c.setopt(pycurl.URL, url or random.choice(self.proxy_judges))
-        c.setopt(pycurl.WRITEDATA, response)
-        c.setopt(pycurl.TIMEOUT_MS, self.timeout)
-        c.setopt(pycurl.SSL_VERIFYHOST, 0)
-        c.setopt(pycurl.SSL_VERIFYPEER, 0)
-
-        if user and password:
-            c.setopt(pycurl.PROXYUSERPWD, f"{user}:{password}")
-
-        if proxy:
-            c.setopt(pycurl.PROXY, proxy)
-
-            if proxy.startswith("https"):
-                c.setopt(pycurl.CAINFO, certifi.where())
-                versions = {
-                    1.3: pycurl.SSLVERSION_MAX_TLSv1_3,
-                    1.2: pycurl.SSLVERSION_MAX_TLSv1_2,
-                    1.1: pycurl.SSLVERSION_MAX_TLSv1_1,
-                    1.0: pycurl.SSLVERSION_MAX_TLSv1_0,
-                }
-                c.setopt(
-                    pycurl.SSLVERSION, versions.get(tls, pycurl.SSLVERSION_MAX_TLSv1_3)
-                )
-
-        try:
-            c.perform()
-        except Exception:
-            return None
-
-        if c.getinfo(pycurl.HTTP_CODE) != 200:
-            return None
-
-        timeout = round(c.getinfo(pycurl.CONNECT_TIME) * 1000)
-        resp_text = response.getvalue().decode("iso-8859-1")
-        # Total time of the request (DNS + connect + transfer)
-        total_time = c.getinfo(pycurl.TOTAL_TIME)
-
-        return {"timeout": timeout, "response": resp_text, "total_time": total_time}
+    # `send_query` moved to `proxy_checker.utils.curl.send_query`
 
     def parse_anonymity(
         self, response: str
@@ -169,9 +124,13 @@ class ProxyChecker:
         return "Elite"
 
     def get_country(self, ip: str) -> list:
-        r = self.send_query(url="https://ip2c.org/" + ip)
-        if r and r["response"].startswith("1"):
-            fields = r["response"].split(";")
+        r = send_query(
+            url="https://ip2c.org/" + ip,
+            timeout=self.timeout,
+            verbose=self.verbose,
+        )
+        if r and not getattr(r, "error", False) and (r.response or "").startswith("1"):
+            fields = (r.response or "").split(";")
             return [fields[3], fields[1]]
         return ["-", "-"]
 
@@ -183,10 +142,55 @@ class ProxyChecker:
         check_all_protocols: bool = False,
         protocol: Optional[Union[str, list]] = None,
         retries: int = 1,
-        tls: float = 1.3,
+        tls: Literal["1.3", "1.2", "1.1", "1.0"] = "1.3",
         user: Optional[str] = None,
         password: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> ProxyChekerResult:
+        """Check a proxy for working protocols, anonymity, latency and country.
+
+        Parameters
+        ----------
+        proxy : str
+            Proxy address in the form 'host:port'. For protocol testing the method
+            will prefix this value with protocol scheme (e.g. 'http://host:port').
+        check_country : bool, default=True
+            If True, query the IP geolocation service to get country and country code.
+        check_address : bool, default=False
+            If True, attempt to parse REMOTE_ADDR from the judge response.
+        check_all_protocols : bool, default=False
+            If True, test all protocols listed; otherwise stop after the first success.
+        protocol : Optional[Union[str, list]], default=None
+            A single protocol name (e.g. 'http') or a list of protocols to test.
+            When None all supported protocols ('http','https','socks4','socks5') are used.
+        retries : int, default=1
+            How many times to retry protocol checks.
+        tls : float, default=1.3
+            Maximum TLS version to allow when using an HTTPS proxy (1.3,1.2,1.1,1.0).
+        user, password : Optional[str]
+            Optional proxy authentication credentials.
+        timeout : Optional[int], default=None
+            Per-request timeout in milliseconds (ms). If None the instance
+            default `self.timeout` is used.
+
+        Returns
+        -------
+        ProxyChekerResult
+            Dataclass with fields: protocols (List[str]), anonymity (Literal), latency (ms int),
+            country, country_code, proxy (remote address when check_address=True), and error flag.
+
+        Notes
+        -----
+        - The timeout parameter is in milliseconds to match the underlying pycurl usage.
+        - The method will return a `ProxyChekerResult` with `error=True` when no protocol
+          succeeds.
+
+        Example
+        -------
+        >>> checker = ProxyChecker()
+        >>> result = checker.check_proxy('1.2.3.4:8080', timeout=10000)
+        >>> print(result.to_json())
+        """
         all_protocols = ["http", "https", "socks4", "socks5"]
 
         if isinstance(protocol, list):
@@ -203,17 +207,24 @@ class ProxyChecker:
 
         for _ in range(retries):
             for proto in protocols_to_test:
-                r = self.send_query(
+                anonymity_response = send_query(
                     proxy=f"{proto}://{proxy}",
                     user=user,
                     password=password,
                     tls=tls,
+                    timeout=timeout if timeout is not None else self.timeout,
+                    verbose=self.verbose,
+                    url=random.choice(self.proxy_judges),
                 )
-                if not r:
+                if not anonymity_response or getattr(
+                    anonymity_response, "error", False
+                ):
                     continue
 
-                protocols[proto] = r
-                latencies.append(r["total_time"] * 1000)
+                protocols[proto] = anonymity_response
+                t = getattr(anonymity_response, "total_time", None)
+                if t is not None:
+                    latencies.append(t * 1000)
 
                 if not check_all_protocols:
                     break
@@ -229,12 +240,11 @@ class ProxyChecker:
                 error=True,
             )
 
-        sample_response = random.choice(list(protocols.values()))["response"]
+        sample_response = random.choice(list(protocols.values())).response or ""
 
         country = (
             self.get_country(proxy.split(":")[0]) if check_country else [None, None]
         )
-        print(sample_response)
 
         anonymity = self.parse_anonymity(sample_response)
 
