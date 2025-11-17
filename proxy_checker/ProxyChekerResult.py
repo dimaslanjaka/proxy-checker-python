@@ -9,6 +9,7 @@ class ProxyChekerResult:
     protocols: List[str]
     anonymity: Union[Literal["Transparent", "Anonymous", "Elite"], str]
     latency: int
+    response: Optional[str] = None
     country: Optional[str] = None
     country_code: Optional[str] = None
     proxy: Optional[str] = None
