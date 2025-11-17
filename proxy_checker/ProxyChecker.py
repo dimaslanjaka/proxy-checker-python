@@ -1,13 +1,9 @@
-# removed random dependency: use a fixed probe URL
 import re
-from typing import Dict, Optional, Union, Literal, cast
-from .FileCache import FileCache
-from .ProxyChekerResult import ProxyChekerResult
-from .utils.curl import send_query, QueryResult
-from .utils.get_device_ip import get_device_ip
+from typing import Dict, Literal, Optional, Union
 from .ProxyAnonymity import ProxyAnonymity
-from .AnonymityResult import AnonymityResult
-
+from .ProxyChekerResult import ProxyChekerResult
+from .utils.curl import QueryResult, send_query
+from .utils.get_device_ip import get_device_ip
 
 # Precompile regexes once
 REGEX_IP = re.compile(
