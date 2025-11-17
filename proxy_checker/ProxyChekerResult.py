@@ -7,7 +7,7 @@ import json
 @dataclass
 class ProxyChekerResult:
     protocols: List[str]
-    anonymity: Literal["Transparent", "Anonymous", "Elite", ""]
+    anonymity: Union[Literal["Transparent", "Anonymous", "Elite"], str]
     latency: int
     country: Optional[str] = None
     country_code: Optional[str] = None

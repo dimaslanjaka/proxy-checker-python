@@ -1,10 +1,12 @@
-import random
+# removed random dependency: use a fixed probe URL
 import re
-from typing import Optional, Union, Literal
+from typing import Dict, Optional, Union, Literal, cast
 from .FileCache import FileCache
 from .ProxyChekerResult import ProxyChekerResult
-from .utils.curl import send_query
+from .utils.curl import send_query, QueryResult
 from .utils.get_device_ip import get_device_ip
+from .ProxyAnonymity import ProxyAnonymity
+from .AnonymityResult import AnonymityResult
 
 
 # Precompile regexes once
@@ -14,75 +16,26 @@ REGEX_IP = re.compile(
 )
 REMOTE_ADDR_REGEX = re.compile(r"REMOTE_ADDR = (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 
-PRIVACY_HEADERS = {
-    "VIA",
-    "X-FORWARDED-FOR",
-    "X-FORWARDED",
-    "FORWARDED-FOR",
-    "FORWARDED-FOR-IP",
-    "FORWARDED",
-    "CLIENT-IP",
-    "PROXY-CONNECTION",
-}
+PROBE_URL = "https://www.google.com"
 
 
 class ProxyChecker:
     def __init__(self, timeout: int = 30000, verbose: bool = False):
         self.timeout = timeout
         self.verbose = verbose
-        self.proxy_judges = [
-            "https://wfuchs.de/azenv.php",
-            "http://mojeip.net.pl/asdfa/azenv.php",
-            "http://httpheader.net/azenv.php",
-            "http://pascal.hoez.free.fr/azenv.php",
-            "https://www.cooleasy.com/azenv.php",
-            "http://azenv.net/",
-            "http://sh.webmanajemen.com/data/azenv.php",
-        ]
 
         self.ip = get_device_ip(timeout=self.timeout, verbose=self.verbose)
         if not self.ip:
             print("ERROR: cannot get device ip")
 
-        self.check_proxy_judges()
+        # ProxyAnonymity helper used for parsing judge responses
+        self.anonymity_helper = ProxyAnonymity()
 
     def change_timeout(self, timeout: int) -> None:
         self.timeout = timeout
 
     def change_verbose(self, value: bool) -> None:
         self.verbose = value
-
-    def check_proxy_judges(self) -> None:
-        checked = []
-        for url in self.proxy_judges:
-            res = send_query(url=url, timeout=self.timeout, verbose=self.verbose)
-            if res and not getattr(res, "error", False):
-                checked.append(url)
-
-        self.proxy_judges = checked
-
-        count = len(checked)
-        if count == 0:
-            print(
-                "ERROR: JUDGES ARE OUTDATED. CREATE A GIT BRANCH AND UPDATE SELF.PROXY_JUDGES"
-            )
-            exit()
-        if count == 1:
-            print("WARNING! THERE'S ONLY 1 JUDGE!")
-
-    def parse_anonymity(
-        self, response: str
-    ) -> Literal["Transparent", "Anonymous", "Elite", ""]:
-        if not self.ip:
-            return ""
-
-        if self.ip in response:
-            return "Transparent"
-
-        if any(header in response for header in PRIVACY_HEADERS):
-            return "Anonymous"
-
-        return "Elite"
 
     def get_country(self, ip: str) -> list:
         r = send_query(
@@ -163,27 +116,27 @@ class ProxyChecker:
         else:
             protocols_to_test = all_protocols
 
-        protocols = {}
+        protocols: Dict[str, QueryResult] = {}
         latencies = []
 
         for _ in range(retries):
             for proto in protocols_to_test:
-                anonymity_response = send_query(
-                    proxy=f"{proto}://{proxy}",
+                # Query a fixed probe URL using the protocol-prefixed proxy URL
+                proxy_url = f"{proto}://{proxy}"
+                result = send_query(
+                    url=PROBE_URL,
+                    proxy=proxy_url,
                     user=user,
                     password=password,
                     tls=tls,
                     timeout=timeout if timeout is not None else self.timeout,
                     verbose=self.verbose,
-                    url=random.choice(self.proxy_judges),
                 )
-                if not anonymity_response or getattr(
-                    anonymity_response, "error", False
-                ):
+                if not result or result.error:
                     continue
 
-                protocols[proto] = anonymity_response
-                t = getattr(anonymity_response, "total_time", None)
+                protocols[proto] = result
+                t = getattr(result, "total_time", None)
                 if t is not None:
                     latencies.append(t * 1000)
 
@@ -201,13 +154,18 @@ class ProxyChecker:
                 error=True,
             )
 
-        sample_response = random.choice(list(protocols.values())).response or ""
+        sample_result = next(iter(protocols.values()))
+        sample_response = sample_result.response or ""
 
         country = (
             self.get_country(proxy.split(":")[0]) if check_country else [None, None]
         )
 
-        anonymity = self.parse_anonymity(sample_response)
+        # Use ProxyAnonymity helper to parse anonymity and remote_addr
+        anonymity_result = self.anonymity_helper.get_anonymity(
+            proxy=proxy, verbose=self.verbose
+        )
+        anonymity = anonymity_result.anonymity or ""
 
         # Compute average latency (ms) from collected per-protocol latencies
         latency = 0
@@ -216,9 +174,12 @@ class ProxyChecker:
 
         remote_addr = None
         if check_address:
-            match = REMOTE_ADDR_REGEX.search(sample_response)
-            if match:
-                remote_addr = match.group(1)
+            # prefer the remote_addr discovered by the anonymity helper
+            remote_addr = anonymity_result.remote_addr
+            if not remote_addr:
+                match = REMOTE_ADDR_REGEX.search(sample_response)
+                if match:
+                    remote_addr = match.group(1)
 
         return ProxyChekerResult(
             protocols=list(protocols.keys()),
