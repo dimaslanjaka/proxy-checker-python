@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Union, Literal
 from dataclasses import asdict
 import json
+from typing import Dict
 
 
 @dataclass
@@ -10,6 +11,8 @@ class ProxyChekerResult:
     anonymity: Union[Literal["Transparent", "Anonymous", "Elite"], str]
     latency: int
     response: Optional[str] = None
+    # messages[protocol][tls] = message string or None
+    messages: Optional[Dict[str, Dict[str, Optional[str]]]] = None
     country: Optional[str] = None
     country_code: Optional[str] = None
     proxy: Optional[str] = None

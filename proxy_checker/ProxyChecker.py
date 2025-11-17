@@ -18,8 +18,8 @@ class ProxyChecker:
         self.timeout = timeout
         self.verbose = verbose
 
-        self.ip = get_device_ip(timeout=self.timeout, verbose=self.verbose)
-        if not self.ip:
+        self.device_ip = get_device_ip(timeout=self.timeout, verbose=self.verbose)
+        if not self.device_ip:
             print("ERROR: cannot get device ip")
 
         # ProxyAnonymity helper used for parsing judge responses
@@ -37,6 +37,8 @@ class ProxyChecker:
             timeout=self.timeout,
             verbose=self.verbose,
         )
+        if self.verbose:
+            print(f"Country lookup for IP {ip}: {r}")
         if r and not getattr(r, "error", False) and (r.response or "").startswith("1"):
             fields = (r.response or "").split(";")
             return [fields[3], fields[1]]
@@ -111,32 +113,47 @@ class ProxyChecker:
         else:
             protocols_to_test = all_protocols
 
+        tls_to_test = []
+        if isinstance(tls, str) and tls in ["1.3", "1.2", "1.1", "1.0"]:
+            tls_to_test.append(tls)
+        else:
+            tls_to_test = ["1.3", "1.2", "1.1", "1.0"]
+
         protocols: Dict[str, QueryResult] = {}
         latencies = []
+        # messages[protocol][tls] = message string or None
+        messages: Dict[str, Dict[str, Optional[str]]] = {}
 
         for _ in range(retries):
             for proto in protocols_to_test:
-                # Query a fixed probe URL using the protocol-prefixed proxy URL
-                proxy_url = f"{proto}://{proxy}"
-                result = send_query(
-                    url=test_url or "https://www.google.com",
-                    proxy=proxy_url,
-                    user=user,
-                    password=password,
-                    tls=tls,
-                    timeout=timeout if timeout is not None else self.timeout,
-                    verbose=self.verbose,
-                )
-                if not result or result.error:
-                    continue
+                for tls in tls_to_test:
+                    proxy_url = f"{proto}://{proxy}"
+                    result = send_query(
+                        url=test_url or "https://www.google.com",
+                        proxy=proxy_url,
+                        user=user,
+                        password=password,
+                        tls=tls,
+                        timeout=timeout if timeout is not None else self.timeout,
+                        verbose=self.verbose,
+                    )
+                    # capture message for this protocol/tls attempt
+                    msg = (
+                        getattr(result, "message", None) if result is not None else None
+                    )
+                    if not result or result.error:
+                        messages.setdefault(proto, {})[tls] = msg
+                        continue
 
-                protocols[proto] = result
-                t = getattr(result, "total_time", None)
-                if t is not None:
-                    latencies.append(t * 1000)
+                    protocols[proto] = result
+                    # mark success for this tls version
+                    messages.setdefault(proto, {})[tls] = None
+                    t = getattr(result, "total_time", None)
+                    if t is not None:
+                        latencies.append(t * 1000)
 
-                if not check_all_protocols:
-                    break
+                    if not check_all_protocols:
+                        break
 
         if not protocols:
             return ProxyChekerResult(
@@ -144,6 +161,7 @@ class ProxyChecker:
                 anonymity="",
                 latency=0,
                 response="",
+                messages=messages,
                 country=None,
                 country_code=None,
                 proxy=None,
@@ -182,6 +200,7 @@ class ProxyChecker:
             anonymity=anonymity,
             latency=latency,
             response=sample_response,
+            messages=messages,
             country=country[0],
             country_code=country[1],
             proxy=remote_addr,
