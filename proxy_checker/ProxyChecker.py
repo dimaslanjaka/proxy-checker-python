@@ -1,10 +1,7 @@
-import json
-import os
 import random
 import re
-import time
 from io import BytesIO
-from typing import Any, Optional, Union
+from typing import Optional, Union, Literal
 
 import certifi
 import pycurl
@@ -157,7 +154,9 @@ class ProxyChecker:
 
         return {"timeout": timeout, "response": resp_text, "total_time": total_time}
 
-    def parse_anonymity(self, response: str) -> str:
+    def parse_anonymity(
+        self, response: str
+    ) -> Literal["Transparent", "Anonymous", "Elite", ""]:
         if not self.ip:
             return ""
 

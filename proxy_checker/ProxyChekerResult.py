@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union, Literal
 from dataclasses import asdict
 import json
 
@@ -7,7 +7,7 @@ import json
 @dataclass
 class ProxyChekerResult:
     protocols: List[str]
-    anonymity: str
+    anonymity: Literal["Transparent", "Anonymous", "Elite", ""]
     latency: int
     country: Optional[str] = None
     country_code: Optional[str] = None
