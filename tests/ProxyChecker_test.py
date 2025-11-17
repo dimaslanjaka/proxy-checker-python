@@ -1,4 +1,4 @@
-from proxy_checker import ProxyChecker, get_device_ip
+from proxy_checker import ProxyChecker
 
 checker = ProxyChecker(verbose=False)
 print(f"my IP {checker.device_ip}")
@@ -9,7 +9,12 @@ result = checker.check_proxy(
     proxy=proxy, check_all_protocols=True, check_address=True, check_country=True
 )
 print(result)
-print(f"latency: {result.latency} ms")
-print(f"anonymity: {result.anonymity}")
-print(f"is device ip same {checker.device_ip == proxy_ip}")
-print(f"country: {result.country} ({result.country_code})")
+if result.error:
+    print(f"Error checking proxy:")
+    for message in result.messages:
+        print(f" - {message}")
+else:
+    print(f"latency: {result.latency} ms")
+    print(f"anonymity: {result.anonymity}")
+    print(f"is device ip same {checker.device_ip == proxy_ip}")
+    print(f"country: {result.country} ({result.country_code})")

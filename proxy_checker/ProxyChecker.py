@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 from .ProxyAnonymity import ProxyAnonymity
 from .ProxyChekerResult import ProxyChekerResult
 from .utils.curl import QueryResult, send_query
@@ -52,7 +52,13 @@ class ProxyChecker:
         check_all_protocols: bool = False,
         protocol: Optional[Union[str, list]] = None,
         retries: int = 1,
-        tls: Union[Literal["1.3", "1.2", "1.1", "1.0"], str] = "1.3",
+        tls: Optional[
+            Union[
+                Literal["1.3", "1.2", "1.1", "1.0"],
+                str,
+                List[Union[Literal["1.3", "1.2", "1.1", "1.0"], str]],
+            ]
+        ] = None,
         user: Optional[str] = None,
         password: Optional[str] = None,
         timeout: Optional[int] = None,
@@ -116,6 +122,12 @@ class ProxyChecker:
         tls_to_test = []
         if isinstance(tls, str) and tls in ["1.3", "1.2", "1.1", "1.0"]:
             tls_to_test.append(tls)
+        elif isinstance(tls, list):
+            for t in tls:
+                if t in ["1.3", "1.2", "1.1", "1.0"]:
+                    tls_to_test.append(t)
+            if not tls_to_test:
+                tls_to_test = ["1.3", "1.2", "1.1", "1.0"]
         else:
             tls_to_test = ["1.3", "1.2", "1.1", "1.0"]
 
