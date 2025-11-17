@@ -152,8 +152,10 @@ class ProxyChecker:
 
         timeout = round(c.getinfo(pycurl.CONNECT_TIME) * 1000)
         resp_text = response.getvalue().decode("iso-8859-1")
+        # Total time of the request (DNS + connect + transfer)
+        total_time = c.getinfo(pycurl.TOTAL_TIME)
 
-        return {"timeout": timeout, "response": resp_text}
+        return {"timeout": timeout, "response": resp_text, "total_time": total_time}
 
     def parse_anonymity(self, response: str) -> str:
         if not self.ip:
@@ -200,6 +202,7 @@ class ProxyChecker:
 
         protocols = {}
         total_timeout = 0
+        latencies = []
 
         for _ in range(retries):
             for proto in protocols_to_test:
@@ -214,6 +217,7 @@ class ProxyChecker:
 
                 protocols[proto] = r
                 total_timeout += r["timeout"]
+                latencies.append(r["total_time"] * 1000)
 
                 if not check_all_protocols:
                     break
@@ -225,7 +229,7 @@ class ProxyChecker:
             return ProxyChekerResult(
                 protocols=[],
                 anonymity="",
-                timeout=0,
+                latency=0,
                 country=None,
                 country_code=None,
                 proxy=None,
@@ -240,7 +244,10 @@ class ProxyChecker:
 
         anonymity = self.parse_anonymity(sample_response)
 
-        avg_timeout = total_timeout // len(protocols)
+        # Compute average latency (ms) from collected per-protocol latencies
+        latency = 0
+        if latencies:
+            latency = int(round(sum(latencies) / len(latencies)))
 
         remote_addr = None
         if check_address:
@@ -251,7 +258,7 @@ class ProxyChecker:
         return ProxyChekerResult(
             protocols=list(protocols.keys()),
             anonymity=anonymity,
-            timeout=avg_timeout,
+            latency=latency,
             country=country[0],
             country_code=country[1],
             proxy=remote_addr,

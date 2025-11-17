@@ -6,7 +6,7 @@ from typing import List, Optional
 class ProxyChekerResult:
     protocols: List[str]
     anonymity: str
-    timeout: int
+    latency: int
     country: Optional[str] = None
     country_code: Optional[str] = None
     proxy: Optional[str] = None
