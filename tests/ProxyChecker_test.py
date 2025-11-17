@@ -10,9 +10,11 @@ result = checker.check_proxy(
 )
 print(result)
 if result.error:
-    print(f"Error checking proxy:")
-    for message in result.messages:
-        print(f" - {message}")
+    print("Error checking proxy:")
+    for proto, tls_map in result.messages.items():
+        print(f"Protocol: {proto}")
+        for tls, msg in tls_map.items():
+            print(f"  TLS {tls}: {msg}")
 else:
     print(f"latency: {result.latency} ms")
     print(f"anonymity: {result.anonymity}")

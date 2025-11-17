@@ -11,7 +11,8 @@ class ProxyChekerResult:
     anonymity: Union[Literal["Transparent", "Anonymous", "Elite"], str]
     latency: int
     response: Optional[str] = None
-    messages: Dict[str, Dict[str, Optional[str]]] = field(default_factory=dict)
+    # messages[protocol][tls] = message string (empty string for success)
+    messages: Dict[str, Dict[str, str]] = field(default_factory=dict)
     country: Optional[str] = None
     country_code: Optional[str] = None
     proxy: Optional[str] = None

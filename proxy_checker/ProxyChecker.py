@@ -134,7 +134,7 @@ class ProxyChecker:
         protocols: Dict[str, QueryResult] = {}
         latencies = []
         # messages[protocol][tls] = message string or None
-        messages: Dict[str, Dict[str, Optional[str]]] = {}
+        messages = {}
 
         for _ in range(retries):
             for proto in protocols_to_test:
@@ -149,17 +149,18 @@ class ProxyChecker:
                         timeout=timeout if timeout is not None else self.timeout,
                         verbose=self.verbose,
                     )
-                    # capture message for this protocol/tls attempt
-                    msg = (
+                    # capture message for this protocol/tls attempt and coerce to str
+                    raw_msg = (
                         getattr(result, "message", None) if result is not None else None
                     )
+                    msg = str(raw_msg) if raw_msg is not None else ""
                     if not result or result.error:
                         messages.setdefault(proto, {})[tls] = msg
                         continue
 
                     protocols[proto] = result
-                    # mark success for this tls version
-                    messages.setdefault(proto, {})[tls] = None
+                    # mark success with empty message
+                    messages.setdefault(proto, {})[tls] = ""
                     t = getattr(result, "total_time", None)
                     if t is not None:
                         latencies.append(t * 1000)
