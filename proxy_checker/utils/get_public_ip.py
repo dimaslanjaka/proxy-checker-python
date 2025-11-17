@@ -1,12 +1,10 @@
-import os
-import json
-import time
 import hashlib
+import json
+import os
 import re
-import tempfile
-from typing import Optional, Dict, Any, List
-from .curl import send_query, QueryResult
-
+import time
+from typing import Any, Dict
+from .curl import QueryResult, send_query
 
 IP_REGEX = re.compile(
     r"(?!0)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
@@ -35,7 +33,7 @@ def get_public_ip(
 ) -> str:
 
     # ------------ CACHE HANDLING ------------
-    cache_dir = os.path.join("/tmp", "runners", "public-ip")
+    cache_dir = os.path.join("/tmp/caches/public-ip")
     os.makedirs(cache_dir, exist_ok=True)
 
     proxy_key = (
