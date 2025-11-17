@@ -187,7 +187,6 @@ class ProxyChecker:
         user: Optional[str] = None,
         password: Optional[str] = None,
     ) -> ProxyChekerResult:
-
         all_protocols = ["http", "https", "socks4", "socks5"]
 
         if isinstance(protocol, list):
@@ -200,7 +199,6 @@ class ProxyChecker:
             protocols_to_test = all_protocols
 
         protocols = {}
-        total_timeout = 0
         latencies = []
 
         for _ in range(retries):
@@ -215,14 +213,10 @@ class ProxyChecker:
                     continue
 
                 protocols[proto] = r
-                total_timeout += r["timeout"]
                 latencies.append(r["total_time"] * 1000)
 
                 if not check_all_protocols:
                     break
-
-            if total_timeout:
-                break
 
         if not protocols:
             return ProxyChekerResult(
@@ -240,6 +234,7 @@ class ProxyChecker:
         country = (
             self.get_country(proxy.split(":")[0]) if check_country else [None, None]
         )
+        print(sample_response)
 
         anonymity = self.parse_anonymity(sample_response)
 
