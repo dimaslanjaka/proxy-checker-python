@@ -142,33 +142,33 @@ class ProxyChecker:
         response = BytesIO()
         c = pycurl.Curl()
         if self.verbose:
-            c.setopt(c.VERBOSE, True)
+            c.setopt(pycurl.VERBOSE, True)
 
-        c.setopt(c.URL, url or random.choice(self.proxy_judges))
-        c.setopt(c.WRITEDATA, response)
-        c.setopt(c.TIMEOUT_MS, self.timeout)
+        c.setopt(pycurl.URL, url or random.choice(self.proxy_judges))
+        c.setopt(pycurl.WRITEDATA, response)
+        c.setopt(pycurl.TIMEOUT_MS, self.timeout)
 
         if user is not None and password is not None:
-            c.setopt(c.PROXYUSERPWD, f"{user}:{password}")
+            c.setopt(pycurl.PROXYUSERPWD, f"{user}:{password}")
 
-        c.setopt(c.SSL_VERIFYHOST, 0)
-        c.setopt(c.SSL_VERIFYPEER, 0)
+        c.setopt(pycurl.SSL_VERIFYHOST, 0)
+        c.setopt(pycurl.SSL_VERIFYPEER, 0)
 
         if proxy:
-            c.setopt(c.PROXY, proxy)
+            c.setopt(pycurl.PROXY, proxy)
             if proxy.startswith("https"):
-                # c.setopt(c.SSL_VERIFYHOST, 1)
+                # c.setopt(pycurl.SSL_VERIFYHOST, 1)
                 # c.setopt(pycurl.SSL_VERIFYHOST, 2)
-                # c.setopt(c.SSL_VERIFYPEER, 1)
-                c.setopt(c.CAINFO, certifi.where())
+                # c.setopt(pycurl.SSL_VERIFYPEER, 1)
+                c.setopt(pycurl.CAINFO, certifi.where())
                 if tls == 1.3:
-                    c.setopt(c.SSLVERSION, c.SSLVERSION_MAX_TLSv1_3)
+                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_3)
                 elif tls == 1.2:
-                    c.setopt(c.SSLVERSION, c.SSLVERSION_MAX_TLSv1_2)
+                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_2)
                 elif tls == 1.1:
-                    c.setopt(c.SSLVERSION, c.SSLVERSION_MAX_TLSv1_1)
+                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_1)
                 elif tls == 1.0:
-                    c.setopt(c.SSLVERSION, c.SSLVERSION_MAX_TLSv1_0)
+                    c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_MAX_TLSv1_0)
 
         # Perform request
         try:
@@ -178,11 +178,11 @@ class ProxyChecker:
             return None
 
         # Return None if the status is not 200
-        if c.getinfo(c.HTTP_CODE) != 200:
+        if c.getinfo(pycurl.HTTP_CODE) != 200:
             return None
 
         # Calculate the request timeout in milliseconds
-        timeout = round(c.getinfo(c.CONNECT_TIME) * 1000)
+        timeout = round(c.getinfo(pycurl.CONNECT_TIME) * 1000)
 
         # Decode the response content
         response = response.getvalue().decode("iso-8859-1")
