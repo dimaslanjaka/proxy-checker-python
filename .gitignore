@@ -139,3 +139,6 @@ dmypy.json
 cython_debug/
 
 .pypirc
+node_modules/
+.cache/
+tmp/

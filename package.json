@@ -1,0 +1,19 @@
+{
+  "name": "proxy-checker-python",
+  "version": "1.0.0",
+  "description": "[![Downloads](https://pepy.tech/badge/proxy-checker)](https://pepy.tech/project/proxy-checker)",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "binary-collections": "^2.0.10"
+  }
+}
