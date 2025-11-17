@@ -1,1 +1,1 @@
-from .proxy_checker import ProxyChecker, FileCache
+from .ProxyChecker import ProxyChecker, FileCache
