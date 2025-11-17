@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Optional, Literal
+from typing import Optional, Literal, Union
 
 import certifi
 import pycurl
@@ -31,7 +31,7 @@ class QueryResult:
 def send_query(
     url: str,
     proxy: Optional[str] = None,
-    tls: Literal["1.3", "1.2", "1.1", "1.0"] = "1.3",
+    tls: Union[Literal["1.3", "1.2", "1.1", "1.0"], str] = "1.3",
     user: Optional[str] = None,
     password: Optional[str] = None,
     timeout: int = 30000,
@@ -114,7 +114,34 @@ def send_query(
         if user and password:
             c.setopt(pycurl.PROXYUSERPWD, f"{user}:{password}")
 
-        c.setopt(pycurl.PROXY, proxy)
+        # Allow proxy to be given as a full URL: scheme://host:port
+        # Extract scheme and set PROXYTYPE for socks variants.
+        proxy_scheme = None
+        proxy_host = proxy
+        try:
+            # simple parse: split scheme
+            if "://" in proxy:
+                proxy_scheme, proxy_host = proxy.split("://", 1)
+        except Exception:
+            proxy_scheme = None
+
+        c.setopt(pycurl.PROXY, proxy_host)
+
+        if proxy_scheme:
+            scheme = proxy_scheme.lower()
+            if scheme in ("http", "https"):
+                c.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_HTTP)
+            elif scheme == "socks4":
+                c.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS4)
+            elif scheme == "socks4a":
+                # socks4a resolves hostnames via the proxy
+                c.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS4A)
+            elif scheme == "socks5":
+                c.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5)
+            elif scheme == "socks5h":
+                # socks5h resolves hostnames via the proxy
+                c.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
+
         if proxy.startswith("https"):
             c.setopt(pycurl.CAINFO, certifi.where())
             versions = {
