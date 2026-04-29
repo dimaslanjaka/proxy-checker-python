@@ -34,13 +34,25 @@ def parse_azenv_to_dict(response: str) -> Dict[str, str]:
     if not match:
         return {}
 
-    content = match.group(1)
     headers: Dict[str, str] = {}
 
-    for line in content.splitlines():
-        if "=" in line:
-            k, v = line.split("=", 1)
-            headers[k.strip()] = v.strip()
+    for line in match.group(1).splitlines():
+        if "=" not in line:
+            continue
+
+        k, v = line.split("=", 1)
+        key = k.strip().upper()
+        value = v.strip()
+
+        # ✅ keep only REMOTE_ADDR and HTTP_* headers
+        if key != "REMOTE_ADDR" and not key.startswith("HTTP_"):
+            continue
+
+        # 🚫 skip noisy/heavy headers
+        if key == "HTTP_COOKIE":
+            continue
+
+        headers[key] = value
 
     return headers
 
