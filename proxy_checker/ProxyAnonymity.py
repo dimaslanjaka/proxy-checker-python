@@ -82,27 +82,39 @@ class ProxyAnonymity:
                 anonymity=None, remote_addr=None, device_ip=device_ip
             )
 
-        # ---- DETECT PRIVACY HEADERS DIRECTLY IN RAW BODY ----
+        return self.parse_anonymity(
+            body=body,
+            public_ip=public_ip,
+            device_ip=device_ip,
+            proxy=proxy,
+            verbose=verbose,
+        )
+
+
+    def parse_anonymity(
+        self,
+        body: str,
+        proxy: str,
+        public_ip: Optional[str] = None,
+        device_ip: Optional[str] = None,
+        verbose: bool = False,
+    ) -> AnonymityResult:
         has_privacy = bool(PRIVACY_REGEX.search(body))
 
-        # ---- SIMPLE ANONYMITY RULES ----
+        if public_ip is None:
+            public_ip = get_public_ip(proxy_info={"proxy": proxy})
+        if device_ip is None:
+            device_ip = get_device_ip()
+
         if public_ip == device_ip:
-            # Proxy reveals your real IP → Transparent
             anonymity = "Transparent"
         else:
-            # Proxy hides your real IP
-            if has_privacy:
-                anonymity = "Anonymous"  # Leaks proxy headers
-            else:
-                anonymity = "Elite"  # No IP leak, no header leak
+            anonymity = "Anonymous" if has_privacy else "Elite"
+
         if verbose:
             minified_body = body.replace("\n", " ").replace("\r", " ")
             print(
                 f"Anonymity result for proxy {proxy}: {anonymity} (public_ip={public_ip}, device_ip={device_ip}, has_privacy_headers={has_privacy}), body={minified_body}..."
             )
 
-        return AnonymityResult(
-            anonymity=anonymity,
-            remote_addr=None,  # Removed, as you asked
-            device_ip=device_ip,
-        )
+        return AnonymityResult(anonymity=anonymity, remote_addr=None, device_ip=device_ip)
