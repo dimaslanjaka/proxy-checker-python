@@ -33,8 +33,7 @@ def get_public_ip(
 ) -> str:
 
     # ------------ CACHE HANDLING ------------
-    cache_dir = os.path.join("/tmp/caches/public-ip")
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir = os.path.join("/tmp/data/public-ip")
 
     proxy_key = (
         proxy_info.get("proxy", "")

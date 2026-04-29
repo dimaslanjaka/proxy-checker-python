@@ -1,3 +1,4 @@
+import os
 import re
 from typing import Optional
 
@@ -30,7 +31,7 @@ def get_device_ip(
     verbose: bool
         Enable verbose output for underlying requests.
     """
-    cache = FileCache("tmp/device-ip.json")
+    cache = FileCache("tmp/data/device-ip.json")
 
     cached = cache.read_cache()
     if cached:
