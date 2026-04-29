@@ -1,6 +1,10 @@
 from .AnonymityResult import AnonymityResult
 from .FileCache import FileCache
-from .ProxyAnonymity import ProxyAnonymity
+from .ProxyAnonymity import (
+    ProxyAnonymity,
+    classify_proxy_from_azenv,
+    parse_azenv_to_dict,
+)
 from .ProxyChecker import ProxyChecker
 from .ProxyChekerResult import ProxyChekerResult
 from .utils.curl import send_query, QueryResult
