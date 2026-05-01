@@ -142,3 +142,13 @@ cython_debug/
 node_modules/
 .cache/
 tmp/
+
+# Composer / PHP ignores
+vendor/
+composer.lock
+composer.phar
+/.phpunit.result.cache
+.phpunit.result.cache
+.phpunit.cache
+.php-cs-fixer.cache
+

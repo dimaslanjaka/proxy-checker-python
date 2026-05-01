@@ -1,0 +1,19 @@
+{
+  "name": "dimaslanjaka/proxy-checker-python",
+  "description": "PHP helper shims for proxy-checker-python package",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "ProxyChecker\\": "proxy_checker/"
+    },
+    "files": [
+      "proxy_checker/FileCache.php"
+    ]
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
