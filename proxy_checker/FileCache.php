@@ -9,9 +9,15 @@ namespace ProxyChecker;
  */
 class FileCache
 {
-  private string $filePath;
+  /**
+   * Path to the cache file.
+   *
+   * @var string
+   */
+  private $filePath;
 
-  public function __construct(string $filePath) {
+  public function __construct(string $filePath)
+  {
     $this->filePath = $filePath;
   }
 
@@ -23,7 +29,7 @@ class FileCache
    *
    * @throws \RuntimeException on write/encode failures
    */
-  public function writeCache(mixed $value, int $expiresIn): void {
+  public function writeCache($value, int $expiresIn): void {
     $dir = dirname($this->filePath);
     if (!is_dir($dir)) {
       if (!mkdir($dir, 0777, true) && !is_dir($dir)) {
@@ -67,7 +73,7 @@ class FileCache
    *
    * @return mixed|null
    */
-  public function readCache(): mixed {
+  public function readCache() {
     if (!file_exists($this->filePath) || !is_readable($this->filePath)) {
       return null;
     }
