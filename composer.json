@@ -9,10 +9,7 @@
   "autoload": {
     "psr-4": {
       "ProxyChecker\\": "proxy_checker/"
-    },
-    "files": [
-      "proxy_checker/FileCache.php"
-    ]
+    }
   },
   "minimum-stability": "stable",
   "prefer-stable": true
